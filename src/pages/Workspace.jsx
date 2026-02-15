@@ -42,10 +42,6 @@ const Workspace = ({ project, onBack }) => {
     };
   }, [project]);
 
-  // ------------------------------------------------------------------
-  // Helper Logic (สถานะหน้า และ การค้นหา)
-  // ------------------------------------------------------------------
-
   const getPageStatus = useCallback((p) => {
     const issues = allIssues.filter((i) => i.page === p);
     if (issues.length === 0) return "clean";

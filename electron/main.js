@@ -99,13 +99,26 @@ function createWindow() {
         },
     });
 
-    // ส่วน UI ยังคงต้องเช็ค URL ของ Vite
-    if (!app.isPackaged && process.env.VITE_DEV_SERVER_URL) {
-        console.log("[System]: Loading from Vite Server...");
+    // 1. ถ้ามี VITE_DEV_SERVER_URL ให้โหลดจาก URL (Dev Mode)
+    if (process.env.VITE_DEV_SERVER_URL) {
+        console.log("[System]: Development Mode - Loading from Vite...");
         win.loadURL(process.env.VITE_DEV_SERVER_URL);
-    } else {
-        console.log("[System]: Loading from built file...");
-        win.loadFile(path.join(app.getAppPath(), 'dist', 'index.html'));
+        
+        // แถม: เปิด DevTools ให้อัตโนมัติเวลาแก้โค้ดจะได้เห็น Error
+        win.webContents.openDevTools(); 
+    } 
+    // 2. ถ้าไม่มี URL แต่มีโฟลเดอร์ dist ให้โหลดไฟล์ (Production Mode)
+    else {
+        const indexPath = path.join(app.getAppPath(), 'dist', 'index.html');
+        
+        if (fs.existsSync(indexPath)) {
+            console.log("[System]: Production Mode - Loading from dist...");
+            win.loadFile(indexPath);
+        } else {
+            // 3. ถ้าพังทั้งคู่ ให้แจ้งเตือนแทนที่จะขึ้นหน้าขาวหรือ Error แปะหน้า
+            console.error("[CRITICAL]: Cannot find Vite Server OR built files in 'dist'!");
+            win.loadURL('data:text/html,<h1>Backend Ready but Frontend missing</h1><p>Please run <b>npm run dev</b> first.</p>');
+        }
     }
 }
 
@@ -240,7 +253,7 @@ app.whenReady().then(() => {
     createWindow();
 });
 
-// [IMPORTANT] ปิด Backend เมื่อปิดแอป
+// ปิด Backend เมื่อปิดแอป
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
         killPythonBackend();
