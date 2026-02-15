@@ -12,6 +12,7 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 
 const Dashboard = ({ onSelectProject }) => {
+    const [isBackendOnline, setIsBackendOnline] = useState(null);
     const [projects, setProjects] = useState([]);
     const [checkingId, setCheckingId] = useState(null);
 
@@ -25,8 +26,23 @@ const Dashboard = ({ onSelectProject }) => {
         }
     };
 
+    const checkStatus = async () => {
+    try {
+        const result = await window.electronAPI.checkBackend();
+        setIsBackendOnline(result.online);
+    } catch (error) {
+        setIsBackendOnline(false);
+    }
+    };
+
     useEffect(() => {
         loadProjects();
+    }, []);
+
+    useEffect(() => {
+        checkStatus();
+        const interval = setInterval(checkStatus, 5000);
+        return () => clearInterval(interval);
     }, []);
 
     // 2. ฟังก์ชันนำเข้าไฟล์ PDF ใหม่
@@ -93,6 +109,14 @@ const Dashboard = ({ onSelectProject }) => {
             <div className="flex justify-between items-end border-b border-slate-200 pb-6">
                 <div>
                     <h2 className="text-2xl font-black text-slate-800 tracking-tight">Project Management</h2>
+                    <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                            isBackendOnline === true ? 'bg-green-50 text-green-600 border border-green-200' : 
+                            isBackendOnline === false ? 'bg-rose-50 text-rose-600 border border-rose-200' : 
+                            'bg-slate-50 text-slate-400 border border-slate-200'
+                        }`}>
+                            <div className={`w-1.5 h-1.5 rounded-full ${isBackendOnline === true ? 'bg-green-500 animate-pulse' : isBackendOnline === false ? 'bg-rose-500' : 'bg-slate-300'}`} />
+                            {isBackendOnline === true ? 'Backend Online' : isBackendOnline === false ? 'Backend Offline' : 'Checking...'}
+                        </div>
                     <p className="text-sm text-slate-500 font-medium">จัดการและตรวจสอบความถูกต้องของวิทยานิพนธ์</p>
                 </div>
                 <button 
@@ -167,7 +191,7 @@ const Dashboard = ({ onSelectProject }) => {
                                                 onClick={() => onSelectProject(proj)} 
                                                 className="bg-blue-600 text-white px-6 py-2.5 rounded-lg text-sm font-bold hover:bg-blue-700 shadow-lg shadow-blue-100 transition-all flex items-center gap-2 active:scale-95"
                                             >
-                                                <span>เปิดหน้า Recheck</span>
+                                                <span>Recheck</span>
                                                 <FontAwesomeIcon icon={faArrowRight} size="xs" />
                                             </button>
                                         </>

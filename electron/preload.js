@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
   // Python Connection
+  checkBackend: () => ipcRenderer.invoke('check-backend-status'),
   testCheckPDF: (filePath) => ipcRenderer.invoke('test-check-pdf', filePath),
   
   // Managed Library Management

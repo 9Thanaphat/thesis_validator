@@ -12,37 +12,35 @@ const Workspace = ({ project, onBack }) => {
 
   // 1. Load Data from Managed Storage via Electron IPC
   useEffect(() => {
-  const loadProjectData = async () => {
-    try {
-      const folder = project.folderName;
+    const loadProjectData = async () => {
+      try {
+        const folder = project.folderName;
 
-      // 1. โหลดข้อมูลผลการตรวจ (JSON)
-      const result = await window.electronAPI.getCheckResult(folder);
-      if (result && result.success) {
-        setAllIssues(result.data.map((item, idx) => ({ ...item, id: idx, isIgnored: false })));
+        // 1. โหลดข้อมูลผลการตรวจ (JSON)
+        const result = await window.electronAPI.getCheckResult(folder);
+        if (result && result.success) {
+          setAllIssues(result.data.map((item, idx) => ({ ...item, id: idx, isIgnored: false })));
+        }
+
+        // 2. โหลด PDF (Buffer -> Blob URL)
+        const buffer = await window.electronAPI.getPDFBlob(folder);
+        if (buffer) {
+          const blob = new Blob([buffer], { type: 'application/pdf' });
+          const url = URL.createObjectURL(blob);
+          setPdfData(url);
+        }
+
+      } catch (err) {
+        console.error("Error loading workspace data:", err);
+        alert("ไม่สามารถโหลดข้อมูลโครงการได้");
       }
+    };
+    loadProjectData();
 
-      // 2. โหลด PDF (Buffer -> Blob URL)
-      const buffer = await window.electronAPI.getPDFBlob(folder);
-      if (buffer) {
-        // [FIX] สร้าง Blob จาก Buffer และสร้าง URL เพื่อความเสถียร
-        const blob = new Blob([buffer], { type: 'application/pdf' });
-        const url = URL.createObjectURL(blob);
-        setPdfData(url);
-      }
-
-    } catch (err) {
-      console.error("Error loading workspace data:", err);
-      alert("ไม่สามารถโหลดข้อมูลโครงการได้");
-    }
-  };
-  loadProjectData();
-
-  // [Cleanup] ลบ URL ทิ้งเมื่อปิดหน้าเพื่อคืน Memory
-  return () => {
-    if (pdfData) URL.revokeObjectURL(pdfData);
-  };
-}, [project]);
+    return () => {
+      if (pdfData) URL.revokeObjectURL(pdfData);
+    };
+  }, [project]);
 
   // ------------------------------------------------------------------
   // Helper Logic (สถานะหน้า และ การค้นหา)
@@ -62,7 +60,6 @@ const Workspace = ({ project, onBack }) => {
 
   const findNextProblemPage = useCallback(() => {
     if (!numPages) return null;
-    // วนหาหน้าถัดไปที่มี Error หรือ Warning ที่ยังไม่ได้ Ignore
     for (let p = pageNumber + 1; p <= numPages; p++) {
       const status = getPageStatus(p);
       if (status === "error" || status === "warning") return p;
@@ -114,12 +111,11 @@ const Workspace = ({ project, onBack }) => {
     if (nextProblemPage) {
       setPageNumber(nextProblemPage);
     } else {
-      alert("🎉 ตรวจครบทุกหน้าแล้ว! ไม่พบปัญหาที่ต้องแก้ไขเพิ่มเติม");
+      alert("ตรวจครบทุกหน้าแล้ว! ไม่พบปัญหาที่ต้องแก้ไขเพิ่มเติม");
     }
   };
 
   const handleExportCSV = () => {
-    // กรองเอาเฉพาะที่ยังไม่ได้แก้ไข (Active Issues)
     const activeIssues = allIssues.filter((i) => !i.isIgnored);
     const header = "Page,Code,Severity,Message,BBox\n";
     const rows = activeIssues
@@ -170,16 +166,52 @@ const Workspace = ({ project, onBack }) => {
     [allIssues, pageNumber]
   );
 
-  const getPageColorClass = (pageIdx) => {
-    const status = getPageStatus(pageIdx);
-    switch (status) {
-      case "error": return "bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100";
-      case "warning": return "bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100";
-      case "resolved": return "bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100";
-      default: return "bg-white text-slate-400 border-slate-200 hover:border-slate-400";
-    }
-  };
+  // [FIXED] ฟังก์ชันคำนวณสีของหน้าใน Document Map
+const getPageColorClass = (page) => {
+    // 1. แปลง page เป็นตัวเลขให้ชัวร์
+    const pageNum = parseInt(page);
+    const pageIssues = allIssues.filter((i) => parseInt(i.page) === pageNum);
 
+    // ถ้าไม่มี Issue เลย -> สีขาว
+    if (pageIssues.length === 0) {
+        return "bg-white text-slate-400 border-slate-200 hover:border-blue-400";
+    }
+
+    const activeIssues = pageIssues.filter(i => !i.isIgnored);
+
+    // ถ้ากด Resolve หมดแล้ว -> สีฟ้า (Resolved)
+    if (activeIssues.length === 0) {
+        return "bg-blue-50 text-blue-600 border-blue-200";
+    }
+
+    // -----------------------------------------------------------------------
+    // [FIX] เช็คแบบเหมาเข่ง: ดูทั้ง severity และ message ว่ามีคำว่า error ไหม
+    // -----------------------------------------------------------------------
+    const isError = activeIssues.some(i => {
+        const sev = (i.severity || "").toString().toLowerCase();
+        const msg = (i.message || "").toString().toLowerCase();
+        // ถ้าช่องไหนมีคำว่า error หรือ critical ให้ถือว่าเป็น Error (สีแดง)
+        return sev === "error" || msg === "error" || sev.includes("error") || msg.includes("error");
+    });
+
+    if (isError) {
+        return "bg-rose-100 text-rose-600 border-rose-200"; // 🔴 สีแดง
+    }
+
+    const isWarning = activeIssues.some(i => {
+        const sev = (i.severity || "").toString().toLowerCase();
+        const msg = (i.message || "").toString().toLowerCase();
+        // ถ้าช่องไหนมีคำว่า warning ให้ถือว่าเป็น Warning (สีเหลือง)
+        return sev === "warning" || msg === "warning" || sev.includes("warn") || msg.includes("warn");
+    });
+    
+    if (isWarning) {
+        return "bg-amber-100 text-amber-600 border-amber-200"; // 🟡 สีเหลือง
+    }
+
+    // Default (Info) -> สีฟ้า
+    return "bg-blue-50 text-blue-600 border-blue-200";
+};
   const renderOverlayBoxes = () => {
     if (!pageDimensions.width || currentPageIssues.length === 0) return null;
     return currentPageIssues.map((issue) => {
