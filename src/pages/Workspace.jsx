@@ -10,6 +10,8 @@ const Workspace = ({ project, onBack }) => {
   const [pdfData, setPdfData] = useState(null);
   const [pageDimensions, setPageDimensions] = useState({ width: 0, height: 0 });
 
+  
+
   // 1. Load Data from Managed Storage via Electron IPC
   useEffect(() => {
     const loadProjectData = async () => {
@@ -63,16 +65,22 @@ const Workspace = ({ project, onBack }) => {
     return null;
   }, [pageNumber, numPages, getPageStatus]);
 
-  // ------------------------------------------------------------------
-  // Actions (จัดการ Issue และ Navigation)
-  // ------------------------------------------------------------------
-
-  const toggleIssueStatus = (issueId) => {
-    setAllIssues((prev) =>
-      prev.map((issue) =>
-        issue.id === issueId ? { ...issue, isIgnored: !issue.isIgnored } : issue
-      )
+  const toggleIssueStatus = async (issueId) => {
+    const updatedIssues = allIssues.map((issue) =>
+      issue.id === issueId ? { ...issue, isIgnored: !issue.isIgnored } : issue,
     );
+    setAllIssues(updatedIssues);
+
+    // 2. ส่งไปบันทึกลงไฟล์ JSON ทันที
+    try {
+      await window.electronAPI.saveCheckResult({
+        folderName: project.folderName,
+        issues: updatedIssues, // ส่งก้อนใหม่ที่มี isIgnored: true ไป
+      });
+      console.log("Auto-saved progress!");
+    } catch (err) {
+      console.error("Failed to save progress:", err);
+    }
   };
 
   const handleTogglePageIgnore = () => {
@@ -153,16 +161,12 @@ const Workspace = ({ project, onBack }) => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [numPages, pageNumber, allIssues]);
 
-  // ------------------------------------------------------------------
-  // UI Rendering Helpers
-  // ------------------------------------------------------------------
-
   const currentPageIssues = useMemo(
     () => allIssues.filter((i) => i.page === pageNumber),
     [allIssues, pageNumber]
   );
 
-  // [FIXED] ฟังก์ชันคำนวณสีของหน้าใน Document Map
+  // ฟังก์ชันคำนวณสีของหน้าใน Document Map
 const getPageColorClass = (page) => {
     // 1. แปลง page เป็นตัวเลขให้ชัวร์
     const pageNum = parseInt(page);
@@ -180,9 +184,6 @@ const getPageColorClass = (page) => {
         return "bg-blue-50 text-blue-600 border-blue-200";
     }
 
-    // -----------------------------------------------------------------------
-    // [FIX] เช็คแบบเหมาเข่ง: ดูทั้ง severity และ message ว่ามีคำว่า error ไหม
-    // -----------------------------------------------------------------------
     const isError = activeIssues.some(i => {
         const sev = (i.severity || "").toString().toLowerCase();
         const msg = (i.message || "").toString().toLowerCase();
@@ -202,10 +203,10 @@ const getPageColorClass = (page) => {
     });
     
     if (isWarning) {
-        return "bg-amber-100 text-amber-600 border-amber-200"; // 🟡 สีเหลือง
+        return "bg-amber-100 text-amber-600 border-amber-200";
     }
 
-    // Default (Info) -> สีฟ้า
+    // Default (Info)
     return "bg-blue-50 text-blue-600 border-blue-200";
 };
   const renderOverlayBoxes = () => {
@@ -270,6 +271,7 @@ const getPageColorClass = (page) => {
           currentPageIssues={currentPageIssues}
           handleTogglePageIgnore={handleTogglePageIgnore}
           toggleIssueStatus={toggleIssueStatus}
+          allIssues={allIssues}
         />
       </div>
     </div>

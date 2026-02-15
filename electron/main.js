@@ -159,26 +159,72 @@ ipcMain.handle('import-thesis', async (event, sourcePath) => {
     }
 });
 
-ipcMain.handle('get-projects', () => {
-    try {
-        if (!fs.existsSync(storagePath)) return [];
-        const folders = fs.readdirSync(storagePath);
-        
-        return folders.map(folder => {
-            const projectDir = path.join(storagePath, folder);
-            const infoPath = path.join(projectDir, 'info.json');
-            const resultPath = path.join(projectDir, 'document_result.json');
+// ใน electron/main.js
 
-            if (fs.existsSync(infoPath)) {
-                const info = JSON.parse(fs.readFileSync(infoPath, 'utf-8'));
-                info.status = fs.existsSync(resultPath) ? 'checked' : 'pending';
-                return info;
-            }
-            return null;
-        }).filter(Boolean).sort((a, b) => b.id - a.id);
-    } catch (err) {
+ipcMain.handle("get-projects", async () => {
+  try {
+
+    if (!fs.existsSync(storagePath)) {
+        console.log("Folder not found!");
         return [];
     }
+
+    const folders = fs.readdirSync(storagePath);
+
+    const projects = folders.map((folder) => {
+      const projectDir = path.join(storagePath, folder);
+      const infoPath = path.join(projectDir, "info.json");
+      
+      // ชื่อไฟล์ผลตรวจ (ต้องตรงกับตอน Save)
+      const resultPath = path.join(projectDir, "document_result.json");
+
+      // ถ้าไม่มี info.json ข้ามเลย
+      if (!fs.existsSync(infoPath)) return null;
+
+      try {
+        const info = JSON.parse(fs.readFileSync(infoPath, "utf-8"));
+
+        // ค่า Default
+        let stats = { total: 0, resolved: 0, remaining: 0 };
+        let status = "pending";
+
+        // อ่านไฟล์ผลตรวจ
+        if (fs.existsSync(resultPath)) {
+          try {
+            status = "checked";
+            const fileContent = fs.readFileSync(resultPath, "utf-8");
+            const resultJson = JSON.parse(fileContent);
+
+            // รองรับโครงสร้างข้อมูลทั้ง 2 แบบ
+            const issues = resultJson.data || (Array.isArray(resultJson) ? resultJson : []);
+
+            const total = issues.length;
+            const resolved = issues.filter((i) => i.isIgnored).length;
+
+            stats = {
+              total: total,
+              resolved: resolved,
+              remaining: total - resolved,
+            };
+          } catch (readErr) {
+            console.error(`Error parsing result for ${folder}:`, readErr);
+            status = "pending"; 
+          }
+        }
+
+        return { ...info, status, stats };
+      } catch (err) {
+        console.error(`Error reading info for ${folder}:`, err);
+        return null;
+      }
+    });
+
+    return projects.filter(Boolean).sort((a, b) => b.id - a.id);
+
+  } catch (err) {
+    console.error("Error getting projects:", err);
+    return [];
+  }
 });
 
 ipcMain.handle('delete-project', (event, folderName) => {
@@ -245,6 +291,32 @@ ipcMain.handle('check-backend-status', async () => {
         return { online: false };
     }
 });
+
+ipcMain.handle('get-config', () => {
+    const exePath = !app.isPackaged 
+        ? path.join(app.getAppPath(), 'bin', 'thesis_backend.exe')
+        : path.join(process.resourcesPath, 'bin', 'thesis_backend.exe');
+    const configPath = path.join(path.dirname(exePath), 'config.json');
+
+    return JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+});
+
+ipcMain.handle('save-config', async (event, newConfig) => {
+    try {
+        const exePath = !app.isPackaged 
+            ? path.join(app.getAppPath(), 'bin', 'thesis_backend.exe')
+            : path.join(process.resourcesPath, 'bin', 'thesis_backend.exe');
+            
+        const configPath = path.join(path.dirname(exePath), 'config.json');
+        
+        fs.writeFileSync(configPath, JSON.stringify(newConfig, null, 4), 'utf-8');
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+});
+
+
 
 // --- 5. Lifecycle ---
 

@@ -6,7 +6,7 @@ import "react-pdf/dist/Page/TextLayer.css";
 pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 const PDFViewer = ({
-  pdfFile, // ตอนนี้จะเป็น URL string เช่น blob:http://localhost...
+  pdfFile,
   pageNumber,
   setNumPages,
   setPageDimensions,
@@ -17,7 +17,7 @@ const PDFViewer = ({
       <div className="relative shadow-2xl h-fit bg-white">
         {pdfFile ? (
           <Document
-            file={pdfFile} // ส่ง URL เข้าไปตรงๆ เลย ไม่ต้องใส่ { data: ... }
+            file={pdfFile}
             onLoadSuccess={({ numPages }) => setNumPages(numPages)}
             onLoadError={(error) => console.error("PDF Load Error:", error)}
           >
@@ -35,13 +35,15 @@ const PDFViewer = ({
             />
             {/* Overlay Boxes */}
             <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
-                <div className="relative w-full h-full pointer-events-auto">
-                    {renderOverlayBoxes()}
-                </div>
+              <div className="relative w-full h-full pointer-events-auto">
+                {renderOverlayBoxes()}
+              </div>
             </div>
           </Document>
         ) : (
-          <div className="p-20 text-slate-400">กำลังเตรียมข้อมูลไฟล์ PDF...</div>
+          <div className="p-20 text-slate-400">
+            กำลังเตรียมข้อมูลไฟล์ PDF...
+          </div>
         )}
       </div>
     </div>
