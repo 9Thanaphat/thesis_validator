@@ -1,23 +1,40 @@
 {
   "name": "thesis_validator",
-  "version": "1.0.0",
-  "description": "",
-  "homepage": "https://github.com/9Thanaphat/thesis_validator#readme",
-  "bugs": {
-    "url": "https://github.com/9Thanaphat/thesis_validator/issues"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/9Thanaphat/thesis_validator.git"
-  },
-  "license": "ISC",
-  "author": "",
-  "type": "commonjs",
-  "main": "main.js",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "main": "electron/main.js",
   "scripts": {
-    "start": "electron ."
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "electron": "electron .",
+    "start": "concurrently -k \"npm run dev\" \"wait-on tcp:5173 && npm run electron\""
+  },
+  "dependencies": {
+    "@fortawesome/fontawesome-svg-core": "^7.2.0",
+    "@fortawesome/free-brands-svg-icons": "^7.2.0",
+    "@fortawesome/free-solid-svg-icons": "^7.2.0",
+    "@fortawesome/react-fontawesome": "^3.2.0",
+    "@tailwindcss/vite": "^4.1.18",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-pdf": "^10.3.0",
+    "tailwindcss": "^4.1.18"
   },
   "devDependencies": {
-    "electron": "^40.4.1"
+    "@eslint/js": "^9.39.1",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.1",
+    "concurrently": "^9.2.1",
+    "electron": "^40.4.1",
+    "eslint": "^9.39.1",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.4.24",
+    "globals": "^16.5.0",
+    "vite": "^7.3.1",
+    "wait-on": "^9.0.4"
   }
 }
