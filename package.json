@@ -1,0 +1,23 @@
+{
+  "name": "thesis_validator",
+  "version": "1.0.0",
+  "description": "",
+  "homepage": "https://github.com/9Thanaphat/thesis_validator#readme",
+  "bugs": {
+    "url": "https://github.com/9Thanaphat/thesis_validator/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/9Thanaphat/thesis_validator.git"
+  },
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^40.4.1"
+  }
+}
