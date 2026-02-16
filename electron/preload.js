@@ -26,4 +26,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getPDFBlob: (folderName) => ipcRenderer.invoke("get-pdf-blob", folderName),
 
   saveCheckResult: (data) => ipcRenderer.invoke("save-check-result", data),
+
+  // Review & Export
+  confirmReview: (folderName) => ipcRenderer.invoke("confirm-review", folderName),
+  exportAnnotatedPDF: (folderName) => ipcRenderer.invoke("export-annotated-pdf", folderName),
 });

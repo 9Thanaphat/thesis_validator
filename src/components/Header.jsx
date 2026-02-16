@@ -3,7 +3,7 @@ import {
   faFilePdf,
   faChevronLeft,
   faChevronRight,
-  faDownload,
+  faClipboardCheck,
   faForwardStep,
   faKeyboard,
   faArrowLeft,
@@ -14,7 +14,7 @@ const Header = ({
   numPages,
   setPageNumber,
   jumpToNextIssue,
-  handleExportCSV,
+  handleConfirmReview,
   onBack,
   projectTitle,
 }) => {
@@ -73,11 +73,11 @@ const Header = ({
         </div>
 
         <button
-          onClick={handleExportCSV}
-          className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all"
+          onClick={handleConfirmReview}
+          className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all shadow-md active:scale-95"
         >
-          <FontAwesomeIcon icon={faDownload} />
-          <span>Export CSV</span>
+          <FontAwesomeIcon icon={faClipboardCheck} />
+          <span>ยืนยันการตรวจ</span>
         </button>
       </div>
     </header>

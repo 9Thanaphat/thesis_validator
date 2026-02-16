@@ -99,23 +99,17 @@ function createWindow() {
         },
     });
 
-    // 1. ถ้ามี VITE_DEV_SERVER_URL ให้โหลดจาก URL (Dev Mode)
     if (process.env.VITE_DEV_SERVER_URL) {
         console.log("[System]: Development Mode - Loading from Vite...");
         win.loadURL(process.env.VITE_DEV_SERVER_URL);
-        
-        // แถม: เปิด DevTools ให้อัตโนมัติเวลาแก้โค้ดจะได้เห็น Error
         win.webContents.openDevTools(); 
-    } 
-    // 2. ถ้าไม่มี URL แต่มีโฟลเดอร์ dist ให้โหลดไฟล์ (Production Mode)
-    else {
+    } else {
         const indexPath = path.join(app.getAppPath(), 'dist', 'index.html');
         
         if (fs.existsSync(indexPath)) {
             console.log("[System]: Production Mode - Loading from dist...");
             win.loadFile(indexPath);
         } else {
-            // 3. ถ้าพังทั้งคู่ ให้แจ้งเตือนแทนที่จะขึ้นหน้าขาวหรือ Error แปะหน้า
             console.error("[CRITICAL]: Cannot find Vite Server OR built files in 'dist'!");
             win.loadURL('data:text/html,<h1>Backend Ready but Frontend missing</h1><p>Please run <b>npm run dev</b> first.</p>');
         }
@@ -159,11 +153,8 @@ ipcMain.handle('import-thesis', async (event, sourcePath) => {
     }
 });
 
-// ใน electron/main.js
-
 ipcMain.handle("get-projects", async () => {
   try {
-
     if (!fs.existsSync(storagePath)) {
         console.log("Folder not found!");
         return [];
@@ -174,32 +165,33 @@ ipcMain.handle("get-projects", async () => {
     const projects = folders.map((folder) => {
       const projectDir = path.join(storagePath, folder);
       const infoPath = path.join(projectDir, "info.json");
-      
-      // ชื่อไฟล์ผลตรวจ (ต้องตรงกับตอน Save)
       const resultPath = path.join(projectDir, "document_result.json");
 
-      // ถ้าไม่มี info.json ข้ามเลย
       if (!fs.existsSync(infoPath)) return null;
 
       try {
         const info = JSON.parse(fs.readFileSync(infoPath, "utf-8"));
 
-        // ค่า Default
         let stats = { total: 0, resolved: 0, remaining: 0 };
-        let status = "pending";
+        // อ่าน status จาก info.json ก่อน (รองรับ reviewed)
+        // ถ้าไม่มี => "pending"
+        let status = info.status || "pending";
 
         // อ่านไฟล์ผลตรวจ
         if (fs.existsSync(resultPath)) {
           try {
-            status = "checked";
+            // ถ้า status ยังเป็น pending แต่มีไฟล์ result => checked
+            if (status === "pending") {
+              status = "checked";
+            }
             const fileContent = fs.readFileSync(resultPath, "utf-8");
             const resultJson = JSON.parse(fileContent);
 
-            // รองรับโครงสร้างข้อมูลทั้ง 2 แบบ
-            const issues = resultJson.data || (Array.isArray(resultJson) ? resultJson : []);
+            // รองรับโครงสร้างข้อมูลทั้ง 3 แบบ
+            const issues = resultJson.issues || resultJson.data || (Array.isArray(resultJson) ? resultJson : []);
 
             const total = issues.length;
-            const resolved = issues.filter((i) => i.isIgnored).length;
+            const resolved = issues.filter((i) => i.is_ignored === true || i.isIgnored === true).length;
 
             stats = {
               total: total,
@@ -265,6 +257,9 @@ ipcMain.handle('get-pdf-blob', async (e, folder) => {
     }
 });
 
+// ============================================================
+// test-check-pdf: ส่ง PDF ไปตรวจที่ Python แล้ว SAVE ผลลง JSON
+// ============================================================
 ipcMain.handle('test-check-pdf', async (event, filePath) => {
     try {
         const response = await fetch('http://127.0.0.1:8002/check_local_pdf', {
@@ -277,7 +272,30 @@ ipcMain.handle('test-check-pdf', async (event, filePath) => {
             const errText = await response.text();
             return { success: false, error: `Backend Error (500): ${errText}` };
         }
-        return await response.json();
+
+        // รับผลจาก Python ตามเดิม ไม่แปลง format
+        const resultData = await response.json();
+
+        // === เพิ่ม: Save ผลลงไฟล์ ===
+        try {
+            const projectDir = path.dirname(filePath);
+            const resultPath = path.join(projectDir, 'document_result.json');
+            fs.writeFileSync(resultPath, JSON.stringify(resultData, null, 4), 'utf-8');
+
+            // อัปเดต info.json status เป็น "checked"
+            const infoPath = path.join(projectDir, 'info.json');
+            if (fs.existsSync(infoPath)) {
+                const info = JSON.parse(fs.readFileSync(infoPath, 'utf-8'));
+                info.status = 'checked';
+                info.checkedDate = new Date().toISOString();
+                fs.writeFileSync(infoPath, JSON.stringify(info, null, 4), 'utf-8');
+            }
+        } catch (saveErr) {
+            console.error('[Save Error]:', saveErr.message);
+        }
+
+        // Return ค่าเดิมจาก Python โดยไม่แปลง
+        return resultData;
     } catch (error) {
         return { success: false, error: "Backend Connection Refused (8002)" };
     }
@@ -316,7 +334,142 @@ ipcMain.handle('save-config', async (event, newConfig) => {
     }
 });
 
+// ============================================================
+// save-check-result: บันทึก isIgnored status ลง JSON
+// ============================================================
+ipcMain.handle('save-check-result', async (event, { folderName, issues }) => {
+    try {
+        const resultPath = path.join(storagePath, folderName, 'document_result.json');
+        
+        let content = {};
+        if (fs.existsSync(resultPath)) {
+             try {
+                 const fileContent = JSON.parse(fs.readFileSync(resultPath, 'utf-8'));
+                 if (fileContent && !Array.isArray(fileContent)) {
+                    content = fileContent;
+                 }
+             } catch (e) {}
+        }
+        
+        // บันทึกลงทั้ง issues และ data เพื่อให้อ่านได้ถูกต้องทุกกรณี
+        content.issues = issues;
+        content.data = issues;
+        
+        fs.writeFileSync(resultPath, JSON.stringify(content, null, 4), 'utf-8');
+        return { success: true };
+    } catch (err) {
+        return { success: false, error: err.message };
+    }
+});
 
+// ============================================================
+// confirm-review: อัปเดต status เป็น "reviewed"
+// ============================================================
+ipcMain.handle('confirm-review', async (event, folderName) => {
+    try {
+        const infoPath = path.join(storagePath, folderName, 'info.json');
+        if (!fs.existsSync(infoPath)) {
+            return { success: false, error: 'info.json not found' };
+        }
+        const info = JSON.parse(fs.readFileSync(infoPath, 'utf-8'));
+        info.status = 'reviewed';
+        info.reviewedDate = new Date().toISOString();
+        fs.writeFileSync(infoPath, JSON.stringify(info, null, 4), 'utf-8');
+        return { success: true };
+    } catch (err) {
+        return { success: false, error: err.message };
+    }
+});
+
+// ============================================================
+// export-annotated-pdf: วาด bbox annotations ลงบน PDF
+// ============================================================
+ipcMain.handle('export-annotated-pdf', async (event, folderName) => {
+    try {
+        const { PDFDocument, rgb, StandardFonts } = await import('pdf-lib');
+
+        const projectDir = path.join(storagePath, folderName);
+        const pdfPath = path.join(projectDir, 'document.pdf');
+        const resultPath = path.join(projectDir, 'document_result.json');
+
+        if (!fs.existsSync(pdfPath) || !fs.existsSync(resultPath)) {
+            return { success: false, error: 'PDF or result file not found' };
+        }
+
+        const pdfBytes = fs.readFileSync(pdfPath);
+        const pdfDoc = await PDFDocument.load(pdfBytes);
+        const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+
+        const resultJson = JSON.parse(fs.readFileSync(resultPath, 'utf-8'));
+        const issues = resultJson.issues || resultJson.data || (Array.isArray(resultJson) ? resultJson : []);
+
+        // วาด annotations เฉพาะ active issues (ที่ยังไม่ resolve)
+        const activeIssues = issues.filter(i => !(i.is_ignored === true || i.isIgnored === true));
+
+        for (const issue of activeIssues) {
+            const pageIdx = (parseInt(issue.page) || 1) - 1;
+            if (pageIdx < 0 || pageIdx >= pdfDoc.getPageCount()) continue;
+
+            const page = pdfDoc.getPage(pageIdx);
+            const { height: pageH } = page.getSize();
+
+            if (issue.bbox && issue.bbox.length === 4) {
+                const [x0, y0, x1, y1] = issue.bbox;
+
+                // PDF coordinate system: y=0 is bottom
+                const rectX = x0;
+                const rectY = pageH - y1;
+                const rectW = x1 - x0;
+                const rectH = y1 - y0;
+
+                const isError = (issue.severity || '').toLowerCase().includes('error');
+                const color = isError ? rgb(0.88, 0.11, 0.28) : rgb(0.98, 0.75, 0.14);
+
+                page.drawRectangle({
+                    x: rectX,
+                    y: rectY,
+                    width: rectW,
+                    height: rectH,
+                    borderColor: color,
+                    borderWidth: 1.5,
+                    opacity: 0.15,
+                    color: color,
+                });
+
+                // วาดข้อความ label เหนือกรอบ
+                const label = `[${issue.code || issue.severity}]`;
+                try {
+                    page.drawText(label, {
+                        x: rectX,
+                        y: rectY + rectH + 2,
+                        size: 7,
+                        font: font,
+                        color: color,
+                    });
+                } catch (e) {}
+            }
+        }
+
+        const annotatedBytes = await pdfDoc.save();
+
+        // เปิด Save Dialog
+        const result = await dialog.showSaveDialog({
+            title: 'Save Annotated PDF',
+            defaultPath: `Annotated_${folderName}.pdf`,
+            filters: [{ name: 'PDF Files', extensions: ['pdf'] }],
+        });
+
+        if (result.canceled || !result.filePath) {
+            return { success: false, error: 'Save cancelled' };
+        }
+
+        fs.writeFileSync(result.filePath, annotatedBytes);
+        return { success: true, filePath: result.filePath };
+    } catch (err) {
+        console.error('Export PDF Error:', err);
+        return { success: false, error: err.message };
+    }
+});
 
 // --- 5. Lifecycle ---
 

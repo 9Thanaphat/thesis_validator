@@ -11,17 +11,19 @@ import {
   faRotateRight,
   faGear,
   faTriangleExclamation,
+  faFilePdf,
+  faClipboardCheck,
 } from "@fortawesome/free-solid-svg-icons";
 
 const Dashboard = ({ onSelectProject, onOpenSettings }) => {
   const [isBackendOnline, setIsBackendOnline] = useState(null);
   const [projects, setProjects] = useState([]);
   const [checkingId, setCheckingId] = useState(null);
+  const [exportingId, setExportingId] = useState(null);
 
   // 1. โหลดรายการโปรเจกต์ทั้งหมด
   const loadProjects = async () => {
     try {
-      // ตรงนี้ electronAPI.getProjects() ต้องส่ง stats กลับมา
       const data = await window.electronAPI.getProjects();
       setProjects(data);
     } catch (error) {
@@ -76,7 +78,6 @@ const Dashboard = ({ onSelectProject, onOpenSettings }) => {
       const result = await window.electronAPI.testCheckPDF(fullPdfPath);
 
       if (result.status === "success" || !result.error) {
-        // [Tip] ไม่ต้อง Alert ก็ได้ ให้มันรีโหลดแล้วโชว์ Badge สถานะแทนจะดูสมูทกว่า
         await loadProjects();
       } else {
         alert("ตรวจไม่สำเร็จ: " + (result.error || result.detail));
@@ -106,6 +107,24 @@ const Dashboard = ({ onSelectProject, onOpenSettings }) => {
       } catch (error) {
         console.error("Delete Error:", error);
       }
+    }
+  };
+
+  // 5. ฟังก์ชัน Export PDF พร้อม Annotations
+  const handleExportPDF = async (proj) => {
+    setExportingId(proj.id);
+    try {
+      const result = await window.electronAPI.exportAnnotatedPDF(proj.folderName);
+      if (result.success) {
+        alert("บันทึกไฟล์ PDF สำเร็จ!");
+      } else if (result.error !== 'Save cancelled') {
+        alert("Export ไม่สำเร็จ: " + result.error);
+      }
+    } catch (error) {
+      console.error("Export PDF Error:", error);
+      alert("ไม่สามารถ Export PDF ได้");
+    } finally {
+      setExportingId(null);
     }
   };
 
@@ -167,27 +186,34 @@ const Dashboard = ({ onSelectProject, onOpenSettings }) => {
         {projects.length > 0 ? (
           projects.map((proj) => {
             const isChecked = proj.status === "checked";
+            const isReviewed = proj.status === "reviewed";
             // ดึงค่า stats ที่ส่งมาจาก electron (ถ้าไม่มีให้กันพังด้วย {})
             const stats = proj.stats || { total: 0, resolved: 0, remaining: 0 };
 
             return (
               <div
                 key={proj.id}
-                className="group flex items-center justify-between p-6 bg-white rounded-2xl border border-slate-200 hover:border-blue-300 hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-300"
+                className={`group flex items-center justify-between p-6 bg-white rounded-2xl border hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-300 ${
+                  isReviewed
+                    ? "border-violet-200 hover:border-violet-300"
+                    : "border-slate-200 hover:border-blue-300"
+                }`}
               >
                 <div className="flex items-start gap-5 flex-1">
                   {/* Icon Status */}
                   <div
                     className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-colors shadow-inner ${
-                      isChecked
-                        ? stats.remaining === 0 && stats.total > 0
-                          ? "bg-green-100 text-green-600"
-                          : "bg-blue-50 text-blue-500"
-                        : "bg-slate-100 text-slate-400"
+                      isReviewed
+                        ? "bg-violet-100 text-violet-600"
+                        : isChecked
+                          ? stats.remaining === 0 && stats.total > 0
+                            ? "bg-green-100 text-green-600"
+                            : "bg-blue-50 text-blue-500"
+                          : "bg-slate-100 text-slate-400"
                     }`}
                   >
                     <FontAwesomeIcon
-                      icon={isChecked ? faCircleCheck : faFileLines}
+                      icon={isReviewed ? faClipboardCheck : isChecked ? faCircleCheck : faFileLines}
                       size="xl"
                     />
                   </div>
@@ -198,8 +224,18 @@ const Dashboard = ({ onSelectProject, onOpenSettings }) => {
                         {proj.originalName}
                       </h3>
 
-                      {/* --- STATUS BADGE (จุดสำคัญ) --- */}
-                      {isChecked ? (
+                      {/* --- STATUS BADGE --- */}
+                      {isReviewed ? (
+                        <span className="flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider bg-violet-100 text-violet-700 border border-violet-200">
+                          <FontAwesomeIcon icon={faClipboardCheck} />
+                          Reviewed
+                          {stats.remaining > 0 && (
+                            <span className="ml-1 text-violet-500">
+                              ({stats.remaining} issues)
+                            </span>
+                          )}
+                        </span>
+                      ) : isChecked ? (
                         stats.total > 0 ? (
                           stats.remaining === 0 ? (
                             <span className="flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider bg-green-100 text-green-700 border border-green-200">
@@ -257,7 +293,33 @@ const Dashboard = ({ onSelectProject, onOpenSettings }) => {
 
                 {/* --- Action Buttons --- */}
                 <div className="flex gap-3 items-center ml-6">
-                  {!isChecked ? (
+                  {isReviewed ? (
+                    /* สถานะ Reviewed: แสดงปุ่ม Export PDF */
+                    <>
+                      <button
+                        onClick={() => handleRunCheck(proj)}
+                        className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                        title="ตรวจใหม่ (Reset Status)"
+                      >
+                        <FontAwesomeIcon
+                          icon={faRotateRight}
+                          spin={checkingId === proj.id}
+                        />
+                      </button>
+                      <button
+                        onClick={() => handleExportPDF(proj)}
+                        disabled={exportingId === proj.id}
+                        className={`flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${
+                          exportingId === proj.id
+                            ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                            : "bg-violet-600 text-white hover:bg-violet-700 shadow-lg shadow-violet-100 active:scale-95"
+                        }`}
+                      >
+                        <FontAwesomeIcon icon={faFilePdf} spin={exportingId === proj.id} />
+                        <span>{exportingId === proj.id ? "Exporting..." : "Export PDF"}</span>
+                      </button>
+                    </>
+                  ) : !isChecked ? (
                     <button
                       disabled={checkingId === proj.id}
                       onClick={() => handleRunCheck(proj)}

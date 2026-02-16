@@ -21,7 +21,28 @@ const Workspace = ({ project, onBack }) => {
         // 1. โหลดข้อมูลผลการตรวจ (JSON)
         const result = await window.electronAPI.getCheckResult(folder);
         if (result && result.success) {
-          setAllIssues(result.data.map((item, idx) => ({ ...item, id: idx, isIgnored: false })));
+          // result.data คือ file content จาก document_result.json
+          // Python ส่งกลับมาเป็น { issues: [...] } หรือ { data: [...] } หรือ Array โดยตรง
+          const rawData = result.data;
+          let rawIssues = [];
+          
+          if (Array.isArray(rawData)) {
+            // กรณีเป็น Array โดยตรง
+            rawIssues = rawData;
+          } else if (rawData && Array.isArray(rawData.issues)) {
+            // กรณี Python ส่ง { issues: [...] }
+            rawIssues = rawData.issues;
+          } else if (rawData && Array.isArray(rawData.data)) {
+            // กรณีเก่า { data: [...] }
+            rawIssues = rawData.data;
+          }
+
+          setAllIssues(rawIssues.map((item, idx) => ({ 
+            ...item, 
+            id: idx, 
+            // Handle both Python's is_ignored (snake_case) and JavaScript's isIgnored (camelCase)
+            isIgnored: item.is_ignored === true || item.isIgnored === true
+          })));
         }
 
         // 2. โหลด PDF (Buffer -> Blob URL)
@@ -83,26 +104,46 @@ const Workspace = ({ project, onBack }) => {
     }
   };
 
-  const handleTogglePageIgnore = () => {
+  const handleTogglePageIgnore = async () => {
     const pageIssues = allIssues.filter((i) => i.page === pageNumber);
     const hasActive = pageIssues.some((i) => !i.isIgnored);
-    setAllIssues((prev) =>
-      prev.map((issue) =>
-        issue.page === pageNumber ? { ...issue, isIgnored: hasActive } : issue
-      )
+    const updatedIssues = allIssues.map((issue) =>
+      issue.page === pageNumber ? { ...issue, isIgnored: hasActive } : issue
     );
+    setAllIssues(updatedIssues);
+
+    // บันทึกลงไฟล์ JSON ทันที
+    try {
+      await window.electronAPI.saveCheckResult({
+        folderName: project.folderName,
+        issues: updatedIssues,
+      });
+      console.log("Auto-saved (page toggle)!");
+    } catch (err) {
+      console.error("Failed to save (page toggle):", err);
+    }
   };
 
-  const handleQuickApproveAndNext = () => {
+  const handleQuickApproveAndNext = async () => {
     const pageIssues = allIssues.filter((i) => i.page === pageNumber);
     const hasActive = pageIssues.some((i) => !i.isIgnored);
 
     if (hasActive) {
-      setAllIssues((prev) =>
-        prev.map((issue) =>
-          issue.page === pageNumber ? { ...issue, isIgnored: true } : issue
-        )
+      const updatedIssues = allIssues.map((issue) =>
+        issue.page === pageNumber ? { ...issue, isIgnored: true } : issue
       );
+      setAllIssues(updatedIssues);
+
+      // บันทึกลงไฟล์ JSON ทันที
+      try {
+        await window.electronAPI.saveCheckResult({
+          folderName: project.folderName,
+          issues: updatedIssues,
+        });
+        console.log("Auto-saved (quick approve)!");
+      } catch (err) {
+        console.error("Failed to save (quick approve):", err);
+      }
     }
 
     if (pageNumber < (numPages || 0)) {
@@ -119,19 +160,19 @@ const Workspace = ({ project, onBack }) => {
     }
   };
 
-  const handleExportCSV = () => {
-    const activeIssues = allIssues.filter((i) => !i.isIgnored);
-    const header = "Page,Code,Severity,Message,BBox\n";
-    const rows = activeIssues
-      .map((i) => `${i.page},${i.code},${i.severity},"${i.message}","${i.bbox ? JSON.stringify(i.bbox) : ""}"`)
-      .join("\n");
-
-    const blob = new Blob([header + rows], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `Final_Report_${project.originalName}.csv`;
-    link.click();
+  const handleConfirmReview = async () => {
+    if (!window.confirm("ยืนยันการตรวจ?\nระบบจะบันทึกสถานะว่าอาจารย์ตรวจแล้ว")) return;
+    try {
+      const result = await window.electronAPI.confirmReview(project.folderName);
+      if (result.success) {
+        onBack(); // กลับไปหน้า Dashboard
+      } else {
+        alert("เกิดข้อผิดพลาด: " + result.error);
+      }
+    } catch (err) {
+      console.error("Confirm review error:", err);
+      alert("ไม่สามารถยืนยันการตรวจได้");
+    }
   };
 
   // ------------------------------------------------------------------
@@ -250,7 +291,7 @@ const getPageColorClass = (page) => {
         numPages={numPages}
         setPageNumber={setPageNumber}
         jumpToNextIssue={jumpToNextIssue}
-        handleExportCSV={handleExportCSV}
+        handleConfirmReview={handleConfirmReview}
         onBack={onBack}
         projectTitle={project.originalName}
       />
