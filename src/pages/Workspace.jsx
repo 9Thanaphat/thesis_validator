@@ -9,8 +9,30 @@ const Workspace = ({ project, onBack }) => {
   const [allIssues, setAllIssues] = useState([]);
   const [pdfData, setPdfData] = useState(null);
   const [pageDimensions, setPageDimensions] = useState({ width: 0, height: 0 });
+  const [showMarginGuide, setShowMarginGuide] = useState(false);
+  const [showIndentGuide, setShowIndentGuide] = useState(false);
+  const [showRuler, setShowRuler] = useState(false);
+  const [marginConfig, setMarginConfig] = useState(null);
+  const [indentConfig, setIndentConfig] = useState(null);
 
-  
+  // 0. Load config from config.json
+  useEffect(() => {
+    const loadConfig = async () => {
+      try {
+        const config = await window.electronAPI.getConfig();
+        if (config && config.margin_mm) {
+          setMarginConfig(config.margin_mm);
+        }
+        if (config && config.indent_rules) {
+          setIndentConfig(config.indent_rules);
+        }
+      } catch (err) {
+        console.error("Failed to load config:", err);
+      }
+    };
+    loadConfig();
+  }, []);
+
 
   // 1. Load Data from Managed Storage via Electron IPC
   useEffect(() => {
@@ -284,6 +306,117 @@ const getPageColorClass = (page) => {
     });
   };
 
+  // Margin Guide: แสดงเส้น margin บน PDF
+  const renderMarginGuides = () => {
+    if (!showMarginGuide || !marginConfig || !pageDimensions.width) return null;
+
+    // A4: 210mm x 297mm, PDF points: 595.28 x 841.89
+    // 1mm = 2.8346 pt
+    const MM_TO_PT = 2.8346;
+    const topPt = marginConfig.top * MM_TO_PT;
+    const bottomPt = marginConfig.bottom * MM_TO_PT;
+    const leftPt = marginConfig.left * MM_TO_PT;
+    const rightPt = marginConfig.right * MM_TO_PT;
+
+    const topPct = (topPt / pageDimensions.height) * 100;
+    const bottomPct = (bottomPt / pageDimensions.height) * 100;
+    const leftPct = (leftPt / pageDimensions.width) * 100;
+    const rightPct = (rightPt / pageDimensions.width) * 100;
+
+    const guideStyle = {
+      position: 'absolute',
+      backgroundColor: 'rgba(59, 130, 246, 0.5)',
+      zIndex: 20,
+      pointerEvents: 'none',
+    };
+
+    return (
+      <>
+        {/* Top margin line */}
+        <div style={{ ...guideStyle, top: `${topPct}%`, left: 0, width: '100%', height: '1px',
+          backgroundImage: 'repeating-linear-gradient(90deg, rgba(59,130,246,0.7) 0, rgba(59,130,246,0.7) 6px, transparent 6px, transparent 12px)',
+          backgroundColor: 'transparent'
+        }} />
+        {/* Bottom margin line */}
+        <div style={{ ...guideStyle, bottom: `${bottomPct}%`, left: 0, width: '100%', height: '1px',
+          backgroundImage: 'repeating-linear-gradient(90deg, rgba(59,130,246,0.7) 0, rgba(59,130,246,0.7) 6px, transparent 6px, transparent 12px)',
+          backgroundColor: 'transparent'
+        }} />
+        {/* Left margin line */}
+        <div style={{ ...guideStyle, left: `${leftPct}%`, top: 0, width: '1px', height: '100%',
+          backgroundImage: 'repeating-linear-gradient(180deg, rgba(59,130,246,0.7) 0, rgba(59,130,246,0.7) 6px, transparent 6px, transparent 12px)',
+          backgroundColor: 'transparent'
+        }} />
+        {/* Right margin line */}
+        <div style={{ ...guideStyle, right: `${rightPct}%`, top: 0, width: '1px', height: '100%',
+          backgroundImage: 'repeating-linear-gradient(180deg, rgba(59,130,246,0.7) 0, rgba(59,130,246,0.7) 6px, transparent 6px, transparent 12px)',
+          backgroundColor: 'transparent'
+        }} />
+        {/* Shaded areas outside margins */}
+        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: `${topPct}%`, backgroundColor: 'rgba(59,130,246,0.05)', zIndex: 19, pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', height: `${bottomPct}%`, backgroundColor: 'rgba(59,130,246,0.05)', zIndex: 19, pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', top: 0, left: 0, width: `${leftPct}%`, height: '100%', backgroundColor: 'rgba(59,130,246,0.05)', zIndex: 19, pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', top: 0, right: 0, width: `${rightPct}%`, height: '100%', backgroundColor: 'rgba(59,130,246,0.05)', zIndex: 19, pointerEvents: 'none' }} />
+      </>
+    );
+  };
+
+  // Indent Guide: แสดงเส้น indent แนวตั้งบน PDF
+  const renderIndentGuides = () => {
+    if (!showIndentGuide || !indentConfig || !marginConfig || !pageDimensions.width) return null;
+
+    const MM_TO_PT = 2.8346;
+    const leftMarginPt = marginConfig.left * MM_TO_PT;
+
+    // กำหนดสี + label สำหรับแต่ละ indent rule
+    const indentLines = [
+      { key: 'paragraph', label: 'Para', color: '#10b981', mm: indentConfig.paragraph },
+      { key: 'sub_section_num', label: 'Sec#', color: '#f59e0b', mm: indentConfig.sub_section_num },
+      { key: 'sub_section_text_1', label: 'Sec1', color: '#f97316', mm: indentConfig.sub_section_text_1 },
+      { key: 'sub_section_text_2', label: 'Sec2', color: '#ef4444', mm: indentConfig.sub_section_text_2 },
+      { key: 'bullet_point', label: 'Bullet', color: '#8b5cf6', mm: indentConfig.bullet_point },
+      { key: 'bullet_text', label: 'BulTxt', color: '#ec4899', mm: indentConfig.bullet_text },
+    ];
+
+    return indentLines.map(({ key, label, color, mm }, index) => {
+      if (mm == null) return null;
+      const posPt = leftMarginPt + (mm * MM_TO_PT);
+      const posPct = (posPt / pageDimensions.width) * 100;
+
+      return (
+        <div key={key} style={{ position: 'absolute', left: `${posPct}%`, top: 0, height: '100%', zIndex: 21, pointerEvents: 'none' }}>
+          {/* Vertical dashed line */}
+          <div style={{
+            width: '1px',
+            height: '100%',
+            backgroundImage: `repeating-linear-gradient(180deg, ${color}99 0, ${color}99 4px, transparent 4px, transparent 8px)`,
+          }} />
+          {/* Label - staggered vertically to avoid overlap */}
+          <div
+            title={`${label}: ${mm} mm`}
+            style={{
+              position: 'absolute',
+              top: `${4 + index * 16}px`,
+              left: '4px',
+              fontSize: '8px',
+              fontWeight: 700,
+              color: color,
+              backgroundColor: `${color}15`,
+              border: `1px solid ${color}30`,
+              padding: '1px 4px',
+              borderRadius: '3px',
+              whiteSpace: 'nowrap',
+              lineHeight: '1.2',
+              pointerEvents: 'auto',
+              cursor: 'default',
+            }}>
+            {label}
+          </div>
+        </div>
+      );
+    });
+  };
+
   return (
     <div className="h-screen bg-slate-100 flex flex-col overflow-hidden font-sans">
       <Header
@@ -294,15 +427,28 @@ const getPageColorClass = (page) => {
         handleConfirmReview={handleConfirmReview}
         onBack={onBack}
         projectTitle={project.originalName}
+        showMarginGuide={showMarginGuide}
+        onToggleMarginGuide={() => setShowMarginGuide(prev => !prev)}
+        showIndentGuide={showIndentGuide}
+        onToggleIndentGuide={() => setShowIndentGuide(prev => !prev)}
+        showRuler={showRuler}
+        onToggleRuler={() => setShowRuler(prev => !prev)}
       />
 
       <div className="flex flex-1 overflow-hidden">
         <PDFViewer
           pdfFile={pdfData}
           pageNumber={pageNumber}
+          numPages={numPages}
+          setPageNumber={setPageNumber}
           setNumPages={setNumPages}
           setPageDimensions={setPageDimensions}
+          pageDimensions={pageDimensions}
+          marginConfig={marginConfig}
+          showRuler={showRuler}
           renderOverlayBoxes={renderOverlayBoxes}
+          renderMarginGuides={renderMarginGuides}
+          renderIndentGuides={renderIndentGuides}
         />
         <Sidebar
           numPages={numPages}

@@ -7,6 +7,9 @@ import {
   faForwardStep,
   faKeyboard,
   faArrowLeft,
+  faBorderAll,
+  faIndent,
+  faRulerHorizontal,
 } from "@fortawesome/free-solid-svg-icons";
 
 const Header = ({
@@ -17,6 +20,12 @@ const Header = ({
   handleConfirmReview,
   onBack,
   projectTitle,
+  showMarginGuide,
+  onToggleMarginGuide,
+  showIndentGuide,
+  onToggleIndentGuide,
+  showRuler,
+  onToggleRuler,
 }) => {
   return (
     <header className="bg-white border-b border-slate-200 px-6 py-3 flex justify-between items-center z-30 shadow-sm">
@@ -44,6 +53,48 @@ const Header = ({
       </div>
 
       <div className="flex items-center gap-4">
+        {/* Margin Guide Toggle */}
+        <button
+          onClick={onToggleMarginGuide}
+          className={`text-xs font-semibold px-3 py-2 rounded-lg border transition-all flex items-center gap-2 ${
+            showMarginGuide
+              ? "text-blue-700 bg-blue-100 border-blue-300 hover:bg-blue-200"
+              : "text-slate-500 bg-slate-50 border-slate-200 hover:bg-slate-100"
+          }`}
+          title="แสดง/ซ่อนกรอบ Margin"
+        >
+          <FontAwesomeIcon icon={faBorderAll} />
+          <span>Margin</span>
+        </button>
+
+        {/* Indent Guide Toggle */}
+        <button
+          onClick={onToggleIndentGuide}
+          className={`text-xs font-semibold px-3 py-2 rounded-lg border transition-all flex items-center gap-2 ${
+            showIndentGuide
+              ? "text-emerald-700 bg-emerald-100 border-emerald-300 hover:bg-emerald-200"
+              : "text-slate-500 bg-slate-50 border-slate-200 hover:bg-slate-100"
+          }`}
+          title="แสดง/ซ่อนเส้น Indent"
+        >
+          <FontAwesomeIcon icon={faIndent} />
+          <span>Indent</span>
+        </button>
+
+        {/* Ruler Toggle */}
+        <button
+          onClick={onToggleRuler}
+          className={`text-xs font-semibold px-3 py-2 rounded-lg border transition-all flex items-center gap-2 ${
+            showRuler
+              ? "text-orange-700 bg-orange-100 border-orange-300 hover:bg-orange-200"
+              : "text-slate-500 bg-slate-50 border-slate-200 hover:bg-slate-100"
+          }`}
+          title="ไม้บรรทัด - วัดระยะ mm จาก margin"
+        >
+          <FontAwesomeIcon icon={faRulerHorizontal} />
+          <span>Ruler</span>
+        </button>
+
         <button
           onClick={jumpToNextIssue}
           className="text-xs font-semibold text-amber-600 bg-amber-50 hover:bg-amber-100 px-3 py-2 rounded-lg border border-amber-200 transition-all flex items-center gap-2"

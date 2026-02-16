@@ -13,9 +13,10 @@ import {
   faTriangleExclamation,
   faFilePdf,
   faClipboardCheck,
+  faEye,
 } from "@fortawesome/free-solid-svg-icons";
 
-const Dashboard = ({ onSelectProject, onOpenSettings }) => {
+const Dashboard = ({ onSelectProject, onPreviewProject, onOpenSettings }) => {
   const [isBackendOnline, setIsBackendOnline] = useState(null);
   const [projects, setProjects] = useState([]);
   const [checkingId, setCheckingId] = useState(null);
@@ -154,9 +155,6 @@ const Dashboard = ({ onSelectProject, onOpenSettings }) => {
                 ? "Backend Offline"
                 : "Checking..."}
           </div>
-          <p className="text-sm text-slate-500 font-medium">
-            จัดการและตรวจสอบความถูกต้องของวิทยานิพนธ์
-          </p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -294,17 +292,14 @@ const Dashboard = ({ onSelectProject, onOpenSettings }) => {
                 {/* --- Action Buttons --- */}
                 <div className="flex gap-3 items-center ml-6">
                   {isReviewed ? (
-                    /* สถานะ Reviewed: แสดงปุ่ม Export PDF */
+                    /* สถานะ Reviewed: แสดงปุ่ม Preview + Export PDF */
                     <>
                       <button
-                        onClick={() => handleRunCheck(proj)}
+                        onClick={() => onPreviewProject(proj)}
                         className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                        title="ตรวจใหม่ (Reset Status)"
+                        title="ดูตัวอย่าง PDF"
                       >
-                        <FontAwesomeIcon
-                          icon={faRotateRight}
-                          spin={checkingId === proj.id}
-                        />
+                        <FontAwesomeIcon icon={faEye} />
                       </button>
                       <button
                         onClick={() => handleExportPDF(proj)}
@@ -320,32 +315,40 @@ const Dashboard = ({ onSelectProject, onOpenSettings }) => {
                       </button>
                     </>
                   ) : !isChecked ? (
-                    <button
-                      disabled={checkingId === proj.id}
-                      onClick={() => handleRunCheck(proj)}
-                      className={`flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${
-                        checkingId === proj.id
-                          ? "bg-slate-100 text-slate-400 cursor-not-allowed"
-                          : "bg-slate-900 text-white hover:bg-slate-800 shadow-md active:scale-95"
-                      }`}
-                    >
-                      <FontAwesomeIcon
-                        icon={faMagnifyingGlass}
-                        spin={checkingId === proj.id}
-                      />
-                      {checkingId === proj.id ? "Checking..." : "Start Check"}
-                    </button>
-                  ) : (
+                    /* สถานะ Pending: แสดงปุ่ม Preview + Start Check */
                     <>
                       <button
-                        onClick={() => handleRunCheck(proj)}
+                        onClick={() => onPreviewProject(proj)}
                         className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                        title="ตรวจใหม่ (Reset Status)"
+                        title="ดูตัวอย่าง PDF"
+                      >
+                        <FontAwesomeIcon icon={faEye} />
+                      </button>
+                      <button
+                        disabled={checkingId === proj.id}
+                        onClick={() => handleRunCheck(proj)}
+                        className={`flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${
+                          checkingId === proj.id
+                            ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                            : "bg-slate-900 text-white hover:bg-slate-800 shadow-md active:scale-95"
+                        }`}
                       >
                         <FontAwesomeIcon
-                          icon={faRotateRight}
+                          icon={faMagnifyingGlass}
                           spin={checkingId === proj.id}
                         />
+                        {checkingId === proj.id ? "Checking..." : "Start Check"}
+                      </button>
+                    </>
+                  ) : (
+                    /* สถานะ Checked: แสดงปุ่ม Preview + Open Report */
+                    <>
+                      <button
+                        onClick={() => onPreviewProject(proj)}
+                        className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                        title="ดูตัวอย่าง PDF"
+                      >
+                        <FontAwesomeIcon icon={faEye} />
                       </button>
                       <button
                         onClick={() => onSelectProject(proj)}
